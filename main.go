@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"log"
 	"net/http"
@@ -74,15 +75,32 @@ func (ws weatherStack) temperature(city string) (float64, error) {
 type multiWeatherProvider []weatherProvider
 
 func (w multiWeatherProvider) temperature(city string) (float64, error) {
+
+	tempc := make(chan float64, len(w))
+	errorc := make(chan error, len(w))
+
+	for _, provider := range w {
+		go func(p weatherProvider) {
+			k, err := p.temperature(city)
+			if err != nil {
+				errorc <- err
+				return
+			}
+			tempc <- k
+		}(provider)
+	}
+
 	sum := 0.0
 
-	for _, p := range w {
-		k, err := p.temperature(city)
-		if err != nil {
-			return sum, err
+	for i := 0; i < len(w); i++ {
+		select {
+		case k := <-tempc:
+			sum += k
+		case <-time.After(300 * time.Millisecond):
+			return 0, errors.New("api time out")
+		case err := <-errorc:
+			return 0, err
 		}
-
-		sum += k
 	}
 
 	return sum / float64(len(w)), nil
