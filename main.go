@@ -110,6 +110,7 @@ func main() {
 	var (
 		weatherStackKey   = flag.String("weatherstack-key", "", "Weather stack api key.")
 		openWeatherMapKey = flag.String("openweathermap-key", "", "Open weather map api key.")
+		ddosEnabled       = flag.Bool("ddos", false, "Enable DDOS Mode")
 	)
 	flag.Parse()
 
@@ -118,9 +119,19 @@ func main() {
 		return
 	}
 
-	mw := multiWeatherProvider{
-		weatherStack{*weatherStackKey},
-		openWeatherMap{*openWeatherMapKey},
+	var perProviderReqCount int
+
+	if *ddosEnabled {
+		perProviderReqCount = 100000
+	} else {
+		perProviderReqCount = 1
+	}
+
+	var mw multiWeatherProvider
+
+	for i := 0; i < perProviderReqCount; i++ {
+		mw = append(mw, weatherStack{*weatherStackKey})
+		mw = append(mw, openWeatherMap{*openWeatherMapKey})
 	}
 
 	http.HandleFunc("/hello", hello)
